@@ -380,12 +380,23 @@ def _get_tool():
         raise RuntimeError(
             "language_tool_python is not installed. Run: pip install language-tool-python"
         )
+    public_api_error = None
     try:
         tool = language_tool_python.LanguageToolPublicAPI("en-US")
         tool.check("This is a test.")
         return tool
-    except Exception:
+    except Exception as e:
+        public_api_error = e
+
+    try:
         return language_tool_python.LanguageTool("en-US")
+    except Exception as local_error:
+        raise RuntimeError(
+            "Could not reach LanguageTool's free public API "
+            f"({public_api_error}), and the local fallback also failed "
+            f"({local_error}). Either check your internet connection, or "
+            "install Java to enable the offline local checker (see README)."
+        ) from local_error
 
 
 def check_text(text: str) -> List[GrammarIssue]:
@@ -503,18 +514,22 @@ with tab_checker:
         else:
             with st.spinner("Checking grammar..."):
                 start = time.time()
+                checker_failed = False
                 try:
                     issues = check_text(text_input)
                     corrected = correct_text(text_input)
                 except Exception as e:
                     issues, corrected = [], text_input
+                    checker_failed = True
                     st.error(f"Grammar checker error: {e}")
                 elapsed = time.time() - start
 
             st.session_state.last_issues = issues
             st.session_state.last_checked_text = text_input
 
-            if not issues:
+            if checker_failed:
+                pass  # error already shown above; don't also claim success
+            elif not issues:
                 st.success("✅ No grammar issues found! Your text looks good.")
             else:
                 st.warning(f"Found {len(issues)} issue(s) in {elapsed:.1f}s.")
