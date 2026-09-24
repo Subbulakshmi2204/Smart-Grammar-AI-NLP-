@@ -23,9 +23,11 @@ git push -u origin main
 
 ## Deploy on Streamlit Community Cloud
 
-1. Push this repo to GitHub (public or private).
+1. Push this repo to GitHub (needs **`app.py`**, **`requirements.txt`**, and **`packages.txt`** — all three, in the repo root).
 2. Go to share.streamlit.io → New app → pick the repo → set main file to `app.py` → Deploy.
-3. No secrets/API keys needed for the default setup.
+3. No secrets/API keys needed. `packages.txt` tells Streamlit Cloud to `apt-get install` Java automatically during the build, so the grammar checker runs the local (unlimited, no-rate-limit) checker instead of relying on the free public API, which gets rate-limited quickly on shared cloud IPs.
+4. The very first grammar check after deploying will take ~20-30 seconds (it downloads a small LanguageTool engine, ~200MB, one time). After that it's fast.
+5. If you ever see a Java-related error on Cloud, go to your app's **Manage app → Reboot app**, which re-runs the `packages.txt` install step.
 
 ## No API keys, anywhere
 
@@ -35,9 +37,10 @@ git push -u origin main
 
 ## File structure
 
-Just two files matter:
+Three files matter:
 - `app.py` — everything (knowledge base, quiz bank, grammar checker, UI)
-- `requirements.txt` — the three dependencies
+- `requirements.txt` — the three Python dependencies
+- `packages.txt` — tells Streamlit Cloud to install Java via apt (needed for the offline grammar checker; irrelevant if you only run this locally with Java already installed)
 
 ## Extending it
 
