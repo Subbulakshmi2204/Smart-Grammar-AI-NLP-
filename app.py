@@ -373,30 +373,38 @@ class GrammarIssue:
 
 @functools.lru_cache(maxsize=1)
 def _get_tool():
-    """Create (and cache) a LanguageTool client. No API key is used anywhere:
-    this either calls LanguageTool's free public endpoint, or — only if that
-    is unreachable — spins up a local LanguageTool server (requires Java)."""
+    """Create (and cache) a LanguageTool client. No API key is used anywhere.
+
+    Order of preference:
+    1. Local LanguageTool server (needs Java, provided via packages.txt on
+       Streamlit Cloud). Preferred because it has no rate limit — important
+       since Streamlit Cloud apps share outbound IPs, which makes the free
+       public API's shared rate limit easy to hit.
+    2. LanguageTool's free public API, as a fallback if Java isn't available
+       (e.g. running locally without Java installed).
+    """
     if language_tool_python is None:
         raise RuntimeError(
             "language_tool_python is not installed. Run: pip install language-tool-python"
         )
-    public_api_error = None
+    local_error = None
+    try:
+        return language_tool_python.LanguageTool("en-US")
+    except Exception as e:
+        local_error = e
+
     try:
         tool = language_tool_python.LanguageToolPublicAPI("en-US")
         tool.check("This is a test.")
         return tool
-    except Exception as e:
-        public_api_error = e
-
-    try:
-        return language_tool_python.LanguageTool("en-US")
-    except Exception as local_error:
+    except Exception as public_error:
         raise RuntimeError(
-            "Could not reach LanguageTool's free public API "
-            f"({public_api_error}), and the local fallback also failed "
-            f"({local_error}). Either check your internet connection, or "
-            "install Java to enable the offline local checker (see README)."
-        ) from local_error
+            f"Local LanguageTool failed ({local_error}), and the free public "
+            f"API also failed ({public_error}). On Streamlit Cloud, add a "
+            "packages.txt file with 'default-jre-headless' in it and reboot "
+            "the app. Locally, install Java (see README) or check your "
+            "internet connection."
+        ) from public_error
 
 
 def check_text(text: str) -> List[GrammarIssue]:
@@ -406,16 +414,16 @@ def check_text(text: str) -> List[GrammarIssue]:
     matches = tool.check(text)
     issues = []
     for m in matches:
-        bad_text = text[m.offset: m.offset + m.errorLength]
+        bad_text = text[m.offset: m.offset + m.error_length]
         issues.append(
             GrammarIssue(
                 message=m.message,
-                rule_id=getattr(m, "ruleId", "") or "",
+                rule_id=getattr(m, "rule_id", "") or "",
                 category=getattr(m, "category", "") or "",
                 bad_text=bad_text,
                 suggestions=list(m.replacements)[:5],
                 offset=m.offset,
-                length=m.errorLength,
+                length=m.error_length,
             )
         )
     return issues
